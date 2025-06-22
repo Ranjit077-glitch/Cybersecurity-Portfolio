@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Checksum Verifier</title>
+</head>
+<body>
+    <input type="file" id="file-input">
+    <button id="check-file">Check File</button>
+    <div id="result"></div>
+    <script>
+        document.getElementById('check-file').addEventListener('click', async () => {
+            const file = document.getElementById('file-input').files[0];
+            if (!file) return;
+
+            const arrayBuffer = await file.arrayBuffer();
+            const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            document.getElementById('result').innerText = `SHA-256: ${hashHex}`;
+        });
+    </script>
+</body>
+</html>

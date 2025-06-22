@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phishing URL Detector</title>
+</head>
+<body>
+    <input type="text" id="url-input" placeholder="Enter URL to check">
+    <button id="check-url">Check URL</button>
+    <div id="result"></div>
+    <script>
+        document.getElementById('check-url').addEventListener('click', () => {
+            const url = document.getElementById('url-input').value;
+            const suspiciousPatterns = ['paypa1', 'login', 'secure', 'update'];
+            let isSuspicious = suspiciousPatterns.some(pattern => url.includes(pattern));
+            document.getElementById('result').innerText = isSuspicious ? 'Suspicious URL!' : 'URL is safe.';
+        });
+    </script>
+</body>
+</html>
