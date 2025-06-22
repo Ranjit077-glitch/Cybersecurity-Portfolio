@@ -3,22 +3,211 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>File Checksum Verifier</title>
+    <title>Enhanced File Checksum Verifier</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .file-drop-area {
+            border: 2px dashed #cbd5e0;
+            transition: all 0.3s;
+        }
+        .file-drop-area.active {
+            border-color: #3b82f6;
+            background-color: #eff6ff;
+        }
+        .hash-value {
+            font-family: monospace;
+            word-break: break-all;
+        }
+    </style>
 </head>
-<body>
-    <input type="file" id="file-input">
-    <button id="check-file">Check File</button>
-    <div id="result"></div>
-    <script>
-        document.getElementById('check-file').addEventListener('click', async () => {
-            const file = document.getElementById('file-input').files[0];
-            if (!file) return;
+<body class="bg-gray-50 min-h-screen flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-lg p-6 w-full max-w-lg">
+        <h1 class="text-2xl font-bold text-gray-800 mb-6">🔍 Enhanced File Checksum Verifier</h1>
+        
+        <div class="space-y-4">
+            <div id="drop-area" class="file-drop-area p-4 rounded-lg">
+                <p id="file-instructions" class="text-center text-gray-600">
+                    Drag and drop a file here or <span class="text-blue-600 cursor-pointer" id="file-select">click to select</span>
+                </p>
+                <div id="file-info" class="hidden mt-2">
+                    <p class="text-sm text-gray-700">Selected file: <span id="file-name" class="font-medium"></span></p>
+                    <p class="text-xs text-gray-500">Size: <span id="file-size"></span></p>
+                </div>
+                <input type="file" id="file-input" class="hidden">
+            </div>
 
-            const arrayBuffer = await file.arrayBuffer();
-            const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
-            const hashArray = Array.from(new Uint8Array(hashBuffer));
-            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-            document.getElementById('result').innerText = `SHA-256: ${hashHex}`;
+            <div class="flex flex-col space-y-2">
+                <label for="expected-hash" class="block text-sm font-medium text-gray-700">Expected SHA-256 Hash</label>
+                <input type="text" id="expected-hash" class="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                       placeholder="Paste the known SHA-256 hash here">
+            </div>
+
+            <div class="flex space-x-2">
+                <button id="verify-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex-1">
+                    Verify Checksum
+                </button>
+                <button id="copy-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg">
+                    Copy Hash
+                </button>
+            </div>
+
+            <div id="result" class="hidden mt-4 p-3 rounded-lg">
+                <h3 class="font-medium text-lg mb-2">Verification Result</h3>
+                <p id="result-text" class="text-sm"></p>
+                <p class="text-xs mt-2">Calculated Hash:</p>
+                <p id="calculated-hash" class="hash-value text-sm bg-gray-100 p-2 rounded mt-1"></p>
+            </div>
+            
+            <div id="debug-info" class="hidden text-xs text-gray-500 mt-2">
+                <p>Debug Info (for testing):</p>
+                <p id="hash-type"></p>
+                <p id="hash-length"></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('file-input');
+        const fileSelect = document.getElementById('file-select');
+        const verifyBtn = document.getElementById('verify-btn');
+        const copyBtn = document.getElementById('copy-btn');
+        const expectedHashInput = document.getElementById('expected-hash');
+        const resultDiv = document.getElementById('result');
+        const resultText = document.getElementById('result-text');
+        const calculatedHashText = document.getElementById('calculated-hash');
+        const dropArea = document.getElementById('drop-area');
+        const fileInstructions = document.getElementById('file-instructions');
+        const fileInfo = document.getElementById('file-info');
+        const fileName = document.getElementById('file-name');
+        const fileSize = document.getElementById('file-size');
+        const debugInfo = document.getElementById('debug-info');
+        const hashType = document.getElementById('hash-type');
+        const hashLength = document.getElementById('hash-length');
+
+        let currentFile = null;
+        let calculatedHash = '';
+
+        // File selection handler
+        fileSelect.addEventListener('click', () => fileInput.click());
+        
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileSelect(e.target.files);
+            }
+        });
+
+        // Drag and drop handlers
+        dropArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropArea.classList.add('active');
+        });
+
+        dropArea.addEventListener('dragleave', () => {
+            dropArea.classList.remove('active');
+        });
+
+        dropArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropArea.classList.remove('active');
+            if (e.dataTransfer.files.length > 0) {
+                handleFileSelect(e.dataTransfer.files);
+            }
+        });
+
+        function handleFileSelect(files) {
+            currentFile = files[0];
+            fileInput.files = files;
+            
+            // Update UI to show selected file
+            fileInstructions.classList.add('hidden');
+            fileInfo.classList.remove('hidden');
+            fileName.textContent = currentFile.name;
+            fileSize.textContent = formatFileSize(currentFile.size);
+            
+            // Clear previous results
+            resultDiv.classList.add('hidden');
+            expectedHashInput.value = '';
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        async function calculateChecksum(file) {
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+                const hashArray = Array.from(new Uint8Array(hashBuffer));
+                calculatedHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+                
+                // Debug info
+                hashType.textContent = 'Hash Algorithm: SHA-256';
+                hashLength.textContent = 'Hash Length: ' + calculatedHash.length + ' chars';
+                
+                return calculatedHash;
+            } catch (error) {
+                console.error('Error calculating checksum:', error);
+                resultDiv.classList.remove('hidden');
+                resultDiv.className = 'mt-4 p-3 rounded-lg bg-red-100';
+                resultText.textContent = '❌ Error calculating checksum: ' + error.message;
+                return null;
+            }
+        }
+
+        verifyBtn.addEventListener('click', async () => {
+            if (!currentFile) {
+                alert('Please select a file first');
+                return;
+            }
+
+            const expectedHash = expectedHashInput.value.trim().toLowerCase();
+            if (!expectedHash) {
+                alert('Please enter the expected SHA-256 hash');
+                return;
+            }
+
+            // Calculate the hash
+            const hash = await calculateChecksum(currentFile);
+            if (!hash) return;
+
+            calculatedHashText.textContent = hash;
+            
+            // Verify the checksum
+            const isMatch = hash === expectedHash;
+            
+            // Update result display
+            resultDiv.classList.remove('hidden');
+            debugInfo.classList.remove('hidden');
+            
+            if (isMatch) {
+                resultDiv.className = 'mt-4 p-3 rounded-lg bg-green-100';
+                resultText.textContent = '✅ Checksum Verified: The file integrity is confirmed.';
+            } else {
+                resultDiv.className = 'mt-4 p-3 rounded-lg bg-red-100';
+                resultText.textContent = '❌ Checksum Mismatch: The file may be corrupted or tampered with.';
+                
+                // Show debug info to help troubleshoot
+                console.log('Expected:', expectedHash);
+                console.log('Calculated:', hash);
+                console.log('Match:', isMatch);
+            }
+        });
+
+        copyBtn.addEventListener('click', () => {
+            if (!calculatedHash) {
+                alert('No hash to copy. Verify a file first.');
+                return;
+            }
+            
+            navigator.clipboard.writeText(calculatedHash).then(() => {
+                alert('Hash copied to clipboard!');
+            }).catch(err => {
+                alert('Failed to copy hash: ' + err);
+            });
         });
     </script>
 </body>
